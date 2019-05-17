@@ -58,7 +58,8 @@ func (e Error) Temporary() bool {
 
 const (
 	BuiltinError ErrorCode = 0x0100 + iota
-	SocketListenerError
+	ServerSocketError
 	SocketAddressError
 	SocketError
+	BootstrapError
 )

@@ -11,13 +11,6 @@ type (
 	Port        int32
 	Host        string
 
-	SocketListener interface {
-		Bind(port Port) error
-		Accept() (Socket, error)
-		LocalAddress() net.Addr
-		Close() error
-	}
-
 	Socket interface {
 		io.Reader
 		io.Writer
@@ -26,7 +19,13 @@ type (
 		LocalAddress() net.Addr
 		IsConnected() bool
 		Close() error
-		Option()
+	}
+
+	ServerSocket interface {
+		Socket
+		Bind(port Port) error
+		Accept() (Socket, error)
+		Listenable() bool
 	}
 )
 
