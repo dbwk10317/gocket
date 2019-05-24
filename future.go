@@ -4,7 +4,8 @@ import "sync"
 
 type (
 	FutureTask func(param interface{}) (result interface{}, err error)
-	Future     interface {
+
+	Future interface {
 		Run(param interface{}) Future
 		Sync() Future
 		AddFutureListener(listener FutureListener)

@@ -1,31 +1,22 @@
 package gocket
 
+import "net"
+
 type (
 	SocketEventListener interface {
-		OnConnect()
-		OnClose()
-		OnError()
+		OnConnect(socket Socket, localAddr net.Addr, remoteAddr net.Addr)
+		OnClose(socket Socket)
+		OnError(socket Socket, err error)
 	}
 
 	ServerSocketEventListener interface {
-		SocketEventListener
-		OnBind()
-		OnAccept()
+		OnBind(socket ServerSocket, localAddr net.Addr)
+		OnAccept(serverSocket ServerSocket, socket Socket)
 	}
 
 	SessionEventListener interface {
-		OnActivated()
-		OnInactivated()
-	}
-
-	HandlerEventListener interface {
-		OnHandleComplete()
-		OnHandleError()
-	}
-
-	PipelineEventListener interface {
-		OnHandlerAdded()
-		OnHandlerRemoved()
+		OnActivated(session Session)
+		OnInactivated(session Session)
 	}
 
 	FutureListener interface {

@@ -10,18 +10,20 @@ import (
 
 type (
 	TCPSocket struct {
-		conn        *net.TCPConn
-		reader      *bufio.Reader
-		writer      *bufio.Writer
-		isConnected bool
-		mutex       *sync.RWMutex
+		conn              *net.TCPConn
+		reader            *bufio.Reader
+		writer            *bufio.Writer
+		isConnected       bool
+		mutex             *sync.RWMutex
+		eventListenerList []gocket.SocketEventListener
 	}
 
 	TCPServerSocket struct {
-		listener   *net.TCPListener
-		listenable bool
-		socket     *TCPSocket
-		mutex      *sync.RWMutex
+		listener          *net.TCPListener
+		listenable        bool
+		socket            *TCPSocket
+		mutex             *sync.RWMutex
+		eventListenerList []gocket.ServerSocketEventListener
 	}
 )
 
@@ -72,8 +74,8 @@ func (s TCPSocket) BindConnection(conn *net.TCPConn) {
 }
 
 func (s *TCPSocket) Read(p []byte) (n int, err error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 
 	if s.isConnected == false {
 		return 0, gocket.NewErrorFromString(gocket.SocketError, "socket already closed")
@@ -83,14 +85,21 @@ func (s *TCPSocket) Read(p []byte) (n int, err error) {
 }
 
 func (s *TCPSocket) Write(p []byte) (n int, err error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 
 	if s.isConnected == false {
 		return 0, gocket.NewErrorFromString(gocket.SocketError, "socket already closed")
 	}
 
 	return s.writer.Write(p)
+}
+
+func (s *TCPSocket) AddEventListener(listener gocket.SocketEventListener) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.eventListenerList = append(s.eventListenerList, listener)
 }
 
 func (s *TCPSocket) RemoteAddress() net.Addr {
@@ -143,7 +152,6 @@ func (s *TCPServerSocket) Bind(port gocket.Port) error {
 
 	s.listener = listener
 	s.listenable = true
-
 	return nil
 }
 
@@ -166,7 +174,6 @@ func (s *TCPServerSocket) Accept() (gocket.Socket, error) {
 
 	sock := NewTCPSocket()
 	sock.BindConnection(conn)
-
 	return sock, nil
 }
 
@@ -180,6 +187,17 @@ func (s *TCPServerSocket) Write(p []byte) (n int, err error) {
 
 func (s *TCPServerSocket) Connect(host gocket.Host, port gocket.Port) error {
 	return s.socket.Connect(host, port)
+}
+
+func (s *TCPServerSocket) AddEventListener(listener gocket.SocketEventListener) {
+	s.socket.AddEventListener(listener)
+}
+
+func (s *TCPServerSocket) AddServerEventListener(listener gocket.ServerSocketEventListener) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.eventListenerList = append(s.eventListenerList, listener)
 }
 
 func (s *TCPServerSocket) IsConnected() bool {
@@ -204,5 +222,7 @@ func (s *TCPServerSocket) Close() error {
 	if s.listenable == false {
 		return gocket.NewErrorFromString(gocket.ServerSocketError, "TCPListener not available")
 	}
+
+	s.listenable = false
 	return s.listener.Close()
 }

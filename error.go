@@ -61,5 +61,7 @@ const (
 	ServerSocketError
 	SocketAddressError
 	SocketError
-	BootstrapError
+	SessionIOError
+	InvalidTypeError
+	PanicError
 )

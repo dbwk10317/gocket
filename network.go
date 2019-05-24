@@ -19,6 +19,7 @@ type (
 		LocalAddress() net.Addr
 		IsConnected() bool
 		Close() error
+		AddEventListener(listener SocketEventListener)
 	}
 
 	ServerSocket interface {
@@ -26,11 +27,13 @@ type (
 		Bind(port Port) error
 		Accept() (Socket, error)
 		Listenable() bool
+		AddServerEventListener(listener ServerSocketEventListener)
 	}
 )
 
 const (
-	TcpSocket SocketType = 0x1000 + iota
+	TCPSocket SocketType = 0x1000 + iota
+	UDPSOcket
 )
 
 const (
