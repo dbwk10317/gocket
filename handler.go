@@ -26,6 +26,18 @@ type (
 	}
 )
 
+func IsSkipper(msg interface{}) bool {
+	if msg != nil {
+		switch msg.(type) {
+		case Skipper:
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
 func (c HandlerContext) Session() Session {
 	return c.session
 }
