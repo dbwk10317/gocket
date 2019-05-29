@@ -10,7 +10,7 @@ import (
 type (
 	Session interface {
 		Unique() string
-		Pipeline() Pipeline
+		Pipeline() *Pipeline
 		Send(msg interface{})
 		AddEventListener(listener SessionEventListener)
 	}
@@ -24,7 +24,7 @@ type (
 		failureChan       chan error
 		quitWriteSockChan chan bool
 		quitReadSockChan  chan bool
-		pipeline          Pipeline
+		pipeline          *Pipeline
 		listenerList      []SessionEventListener
 		socket            Socket
 		isActive          bool
@@ -80,7 +80,7 @@ func (s *socketSession) Unique() string {
 	return s.id
 }
 
-func (s *socketSession) Pipeline() Pipeline {
+func (s *socketSession) Pipeline() *Pipeline {
 	return s.pipeline
 }
 

@@ -2,23 +2,12 @@ package gocket
 
 //noinspection SpellCheckingInspection
 type (
+	Skipper interface{}
+
 	Handler interface {
 		CatchError(ctx HandlerContext, err error)
-	}
-
-	InboundHandler interface {
-		Handler
-		ReadMessage(ctx HandlerContext, msg interface{})
-	}
-
-	OutboundHandler interface {
-		Handler
-		WriteMessage(ctx HandlerContext, msg interface{})
-	}
-
-	HandlerInvoker interface {
-		NextReadMessage(msg interface{})
-		NextWriteMessage(msg interface{})
+		ProcessRead(ctx HandlerContext, msg interface{}) (result interface{})
+		ProcessWrite(ctx HandlerContext, msg interface{}) (result interface{})
 	}
 
 	HandlerInitializer interface {
@@ -41,8 +30,16 @@ func (c HandlerContext) Session() Session {
 	return c.session
 }
 
+func (c HandlerContext) Pipeline() *Pipeline {
+	return c.session.Pipeline()
+}
+
 func (c HandlerContext) Attribute(key string) interface{} {
 	return c.attributeMap[key]
+}
+
+func (c HandlerContext) SetAttribute(key string, value interface{}) {
+	c.attributeMap[key] = value
 }
 
 func (c HandlerContext) Send(msg interface{}) {
@@ -51,8 +48,4 @@ func (c HandlerContext) Send(msg interface{}) {
 
 func (c HandlerContext) Throw(err error) {
 	c.handler.CatchError(c, err)
-}
-
-func (c HandlerContext) NextReadMessage(msg interface{}) {
-
 }

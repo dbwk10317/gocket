@@ -32,6 +32,7 @@ func (f *future) AddFutureListener(listener FutureListener) {
 
 func (f *future) Run(param interface{}) Future {
 	go func() {
+		f.waitGroup.Add(1)
 		defer f.waitGroup.Done()
 		result, err := f.task(param)
 		for _, listener := range f.listenerList {
@@ -48,7 +49,6 @@ func (f *future) Run(param interface{}) Future {
 }
 
 func (f *future) Sync() Future {
-	f.waitGroup.Add(1)
 	f.waitGroup.Wait()
 	return f
 }
