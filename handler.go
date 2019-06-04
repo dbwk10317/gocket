@@ -2,17 +2,19 @@ package gocket
 
 //noinspection SpellCheckingInspection
 type (
-	Skipper interface{}
+	HandlerProcessFunc func(ctx HandlerContext, msg interface{}) (result interface{})
+	HandlerErrorFunc   func(ctx HandlerContext, err error)
 
 	Handler interface {
 		CatchError(ctx HandlerContext, err error)
 		ProcessRead(ctx HandlerContext, msg interface{}) (result interface{})
 		ProcessWrite(ctx HandlerContext, msg interface{}) (result interface{})
 	}
-
 	HandlerInitializer interface {
 		Initialize(session Session)
 	}
+
+	Skipper interface{}
 
 	InboundHandlerAdapter struct {
 		catch func(ctx HandlerContext, err error)

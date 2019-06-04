@@ -2,6 +2,7 @@ package gocket
 
 import (
 	"github.com/oklog/ulid"
+	"github.com/sirupsen/logrus"
 	"math/rand"
 	"sync"
 	"time"
@@ -12,24 +13,27 @@ type (
 		Unique() string
 		Pipeline() *Pipeline
 		Send(msg interface{})
+		Logger() Logger
 		AddEventListener(listener SessionEventListener)
 	}
 
 	socketSession struct {
 		id                string
-		writeSockChan     chan []byte
-		readSockChan      chan []byte
+		writeSockChan     chan interface{}
+		readSockChan      chan interface{}
 		sendMsgChan       chan interface{}
 		notifyChan        chan interface{}
 		failureChan       chan error
 		quitWriteSockChan chan bool
 		quitReadSockChan  chan bool
+		quitPipelineChan  chan bool
 		pipeline          *Pipeline
 		listenerList      []SessionEventListener
 		socket            Socket
 		isActive          bool
 		config            SessionConfig
 		mutex             *sync.RWMutex
+		logger            *logrus.Entry
 	}
 )
 
@@ -46,12 +50,6 @@ func uidGenerator() func() string {
 	}
 }
 
-func catchPanic(errChan chan error) {
-	if err := RecoverPanic(); err != nil {
-		errChan <- err
-	}
-}
-
 func NewSocektSession() Session {
 	return NewSocketSessionWithConfig(DefaultSessionConfig())
 }
@@ -65,15 +63,24 @@ func NewSocketSessionWithConfig(config SessionConfig) Session {
 		pipeline:          NewPipeline(),
 		quitReadSockChan:  make(chan bool, 2),
 		quitWriteSockChan: make(chan bool, 2),
+		quitPipelineChan:  make(chan bool, 2),
 	}
 
-	s.writeSockChan = make(chan []byte, s.config.MaxChannelBufferSize)
-	s.readSockChan = make(chan []byte, s.config.MaxChannelBufferSize)
+	s.writeSockChan = make(chan interface{}, s.config.MaxChannelBufferSize)
+	s.readSockChan = make(chan interface{}, s.config.MaxChannelBufferSize)
 	s.failureChan = make(chan error, s.config.MaxChannelBufferSize)
 	s.notifyChan = make(chan interface{}, s.config.MaxChannelBufferSize)
 	s.sendMsgChan = make(chan interface{}, s.config.MaxChannelBufferSize)
 
+	s.logger = logrus.WithFields(logrus.Fields{
+		"sessionID": s.id,
+	})
+
 	return s
+}
+
+func (s *socketSession) Logger() Logger {
+	return s.logger
 }
 
 func (s *socketSession) Unique() string {
@@ -85,7 +92,7 @@ func (s *socketSession) Pipeline() *Pipeline {
 }
 
 func (s *socketSession) BindSocket(sock Socket) bool {
-	defer catchPanic(s.failureChan)
+	defer s.catchPanic()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -112,7 +119,7 @@ func (s *socketSession) BindSocket(sock Socket) bool {
 }
 
 func (s *socketSession) ReleaseSocket() {
-	defer catchPanic(s.failureChan)
+	defer s.catchPanic()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -129,6 +136,7 @@ func (s *socketSession) ReleaseSocket() {
 	s.isActive = false
 	s.quitReadSockChan <- true
 	s.quitWriteSockChan <- true
+	s.quitPipelineChan <- true
 	s.flushChannels()
 
 	for _, listener := range s.listenerList {
@@ -146,7 +154,7 @@ func (s *socketSession) Send(msg interface{}) {
 }
 
 func (s *socketSession) processRead() {
-	defer catchPanic(s.failureChan)
+	defer s.catchPanic()
 	buffer := make([]byte, s.config.MaxReadBufferSize)
 Loop:
 	for {
@@ -171,15 +179,20 @@ Loop:
 }
 
 func (s *socketSession) processWrite() {
-	defer catchPanic(s.failureChan)
+	defer s.catchPanic()
 Loop:
 	for {
 		select {
 		case <-s.quitWriteSockChan:
 			break Loop
-		case data := <-s.writeSockChan:
+		case msg := <-s.writeSockChan:
 			if s.socket == nil && s.socket.IsConnected() == false {
 				continue
+			}
+
+			data, ok := msg.([]byte)
+			if ok == false {
+				s.failureChan <- NewErrorFromString(SessionIOError, "can't not convert message to byte array")
 			}
 			length := int32(len(data))
 			bufferSize := s.config.MaxWriteBufferSize
@@ -203,15 +216,23 @@ Loop:
 }
 
 func (s *socketSession) processPipeline() {
-	defer catchPanic(s.failureChan)
+	defer s.catchPanic()
 
-Loop:
-	for {
-		select {
-		case readSockData := <-s.readSockChan:
-		case sendMsgData := <-s.sendMsgChan:
-		}
+	logger := s.logger.WithFields(logrus.Fields{
+		"event": "receive",
+	})
+	ctx := HandlerContext{
+		logger: logger,
 	}
+	done := make(chan bool)
+	pipe := s.pipeline.InboundPipe(ctx)
+	result := pipe(s.readSockChan, done)
+
+	select {
+	case <-s.quitReadSockChan:
+	case <-result:
+	}
+
 }
 
 func (s *socketSession) flushChannels() {
@@ -225,8 +246,19 @@ L1:
 		case <-s.failureChan:
 		case <-s.quitReadSockChan:
 		case <-s.quitWriteSockChan:
+		case <-s.quitPipelineChan:
 		default:
 			break L1
+		}
+	}
+}
+
+func (s *socketSession) catchPanic() {
+	if err := RecoverPanic(); err != nil {
+		if s.failureChan != nil {
+			s.failureChan <- err
+		} else {
+			//
 		}
 	}
 }
